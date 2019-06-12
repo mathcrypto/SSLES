@@ -22,5 +22,5 @@ Create the Makefile:
 
   Then, to compile the library, tests, and profiling harness, run this within the build directory:
 
-``make``
+``$ make``
 
