@@ -6,6 +6,7 @@ Single Secret Leader Election Snark
 Build instructions
 
 Fetch dependencies from their GitHub repos:
+
 ``$ git submodule init && git submodule update``
 
 Create the Makefile:
