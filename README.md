@@ -11,7 +11,7 @@ Fetch dependencies from their GitHub repos:
 
 Create the Makefile:
 
-```$ mkdir build && cd build
+```$ mkdir build && cd build```
 ```$LD_LIBRARY_PATH=/usr/local/opt/openssl/lib:"${LD_LIBRARY_PATH}"                    
 CPATH=/usr/local/opt/openssl/include:"${CPATH}"                                    
 PKG_CONFIG_PATH=/usr/local/opt/openssl/lib/pkgconfig:"${PKG_CONFIG_PATH}"          
