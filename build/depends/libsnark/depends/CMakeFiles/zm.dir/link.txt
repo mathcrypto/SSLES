@@ -1,2 +1,0 @@
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libzm.a  CMakeFiles/zm.dir/ate-pairing/src/zm.cpp.o CMakeFiles/zm.dir/ate-pairing/src/zm2.cpp.o
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libzm.a
