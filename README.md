@@ -1,4 +1,4 @@
-# SSLES
+# [SSLES](https://ethresear.ch/t/cryptographic-sortition-possible-solution-with-zk-snark/5102)
 Single Secret Leader Election Snark (Block Proposer privacy Protocol using ZKSnarks):
 
 
