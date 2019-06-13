@@ -16,7 +16,7 @@ Secret parameters:
 
 **Protocol**
 - Generate `N` signature pairs pub/priv pair, we generate a SNARK (since participants have to send proof that they are eligible). 
-- We choose one party `hash h to be the block proposer.
+- We choose one party `hash h` to be the block proposer.
 - The party that was chosen will publish the sig that proves they are the right person.
 - The other parties verify the sig to verify if  the msg m was actually signed by the corresponding private key.
 
