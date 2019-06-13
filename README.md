@@ -32,7 +32,6 @@ Merkled path: mp
 
 
 
-
 # Build instructions
 
 Fetch dependencies from their GitHub repos:
