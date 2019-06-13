@@ -4,14 +4,15 @@ Single Secret Leader Election Snark (Block Proposer privacy Protocol using ZKSna
 
 Public parameters:
 
-A public random number `m `(emitted by the random beacon).
-The roothash of all the participants’ public keys: `rh`
-`h = hash(signed(m))`
+- A public random number `m `(emitted by the random beacon).
+- The roothash of all the participants’ public keys: `rh`.
+- `h = hash(signed(m))`
+
 Secret parameters:
 
-Sign the message m by all participants: signed(m)
-The signer’s public key: `pk`
-Merkled path: `mp`
+- Sign the message m by all participants: signed(m)
+- The signer’s public key: `pk`
+- Merkled path: `mp`
 
 **Protocol**
 - Generate N signature pairs pub/priv pair, we generate a SNARK (since participants have to send proof that they are eligible). 
