@@ -12,7 +12,7 @@ Secret parameters:
 
 - Sign the message `m` by all participants: `signed(m)`
 - The signer’s public key: `pk`
-- Merkled path: `mp`
+- Merkle path: `mp`
 
 **Protocol**
 - Generate `N` signature pairs pub/priv pair, we generate a SNARK (since participants have to send proof that they are eligible). 
