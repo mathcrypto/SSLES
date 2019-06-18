@@ -64,6 +64,7 @@ template<typename FieldT>
     shared_ptr<digest_variable<FieldT>> computed_hash; 
     shared_ptr<sha256_compression_function_gadget<FieldT>> hash; // the sha256 gadget
     pb_variable<FieldT> zero; 
+    pb_variable_array<FieldT> padding_var;
 
 
 
@@ -88,12 +89,12 @@ template<typename FieldT>
 
 
         {
-            	// number of field packed elements as input
+            // number of field packed elements as input
 
             input_size_in_fields = libff::div_ceil(input_size_in_bits, FieldT::capacity()); 
 
                 /* fast ceiling of an integer division 
-            	   long long div_ceil(long long x, long long y)
+                   long long div_ceil(long long x, long long y)
                 {
                     return (x + (y-1)) 
                 }
@@ -101,12 +102,12 @@ template<typename FieldT>
                   */
 
 
-                // we allocate space for the field elements to be of size input_size_in_field_elements
+            // we allocate space for the field elements to be of size input_size_in_field_elements
 
             input_as_field_elements.allocate(pb, input_size_in_fields, "public_inputs");
 
 
-            this->pb.set_input_sizes(input_size_in_field_elements); 
+            this->pb.set_input_sizes(input_size_in_fields); 
 
         }
 
@@ -128,7 +129,7 @@ template<typename FieldT>
 
 
         
-            // SHA256's length padding
+        // SHA256's length padding
         for (size_t i = 0; i < 256; i++) {
             if (sha256_padding[i])
                 padding_var.emplace_back(ONE);
@@ -139,7 +140,7 @@ template<typename FieldT>
 
 
         // Inputs are 256 bit padding and 256 bit message block
-        block.reset(new block_variable<FieldT>(in_pb, {
+        block.reset(new block_variable<FieldT>(pb, {
            preimage->bits,
            padding_var
        }, "block"));
@@ -172,9 +173,9 @@ template<typename FieldT>
         // Sanity check
         generate_r1cs_equals_const_constraint<FieldT>(this->pb, zero, FieldT::zero(), "zero");
 
-        hash->generate_r1cs_constraints(false); /* ensure correct hash computations */
+        hash->generate_r1cs_constraints(false); 
 
-        // Constraint that computed_root * 1 == rootDigest which is equivalent to computed_root == rootDigest
+        // Constraint that computed_hash * 1 == h_result which is equivalent to computed_hash == h_result
 
         this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1, computed_hash, h_result), "Enforce valid proof");
 
@@ -182,7 +183,7 @@ template<typename FieldT>
 
 
     void generate_r1cs_witness(
-        const libff::bit_vector& secret, const libff::bit_vector& pub_hash
+        const bit_vector & secret, const bit_vector & pub_hash
         ) {
 
         // Fill our digests with our witnessed data
@@ -192,14 +193,13 @@ template<typename FieldT>
         // Set the zero pb_variable to zero
         this->pb.val(zero) = FieldT::zero();
 
+        
         // Generate witnesses as necessary in our gadgets
-
-
         hash->generate_r1cs_witness();
         unpacker->generate_r1cs_witness_from_bits();
 
 
-        pub_hash->bits.fill_with_bits(this->pb, h_result);
+        h_result->bits.fill_with_bits(this->pb, pub_hash);
 
 
 
@@ -211,7 +211,7 @@ template<typename FieldT>
 
 template<typename FieldT>
 
-    // The statement (public values) is called primary input while the witness (the secret values) is called auxiliary input.
+// The statement (public values) is called primary input while the witness (the secret values) is called auxiliary input.
 
 const r1cs_primary_input<FieldT> primary_inputs (const bit_vector &pub_hash)
 
@@ -243,13 +243,3 @@ const r1cs_primary_input<FieldT> primary_inputs (const bit_vector &pub_hash)
 
 
 }
-
-
-
-
-
-
-
-
-
-
