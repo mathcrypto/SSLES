@@ -1,16 +1,16 @@
 include_directories(.)
 
 add_executable(
-merkle
+merkle_proof
 merkle.hpp
 )
 target_link_libraries(
-merkle
+merkle_proof
 
 snark
 )
 target_include_directories(
-merkle
+merkle_proof
 
 PUBLIC
 ${DEPENDS_DIR}/libsnark
@@ -18,19 +18,18 @@ ${DEPENDS_DIR}/libsnark/depends/libfqfft
 ${DEPENDS_DIR}/libsnark/depends/libff
 
 )
-
 
 add_executable(
-test
-test.cpp
+preimage_proof
+preimage_proof.hpp
 )
 target_link_libraries(
-test
+preimage_proof
 
 snark
 )
 target_include_directories(
-test
+preimage_proof
 
 PUBLIC
 ${DEPENDS_DIR}/libsnark
@@ -38,4 +37,5 @@ ${DEPENDS_DIR}/libsnark/depends/libfqfft
 ${DEPENDS_DIR}/libsnark/depends/libff
 
 )
+
 
