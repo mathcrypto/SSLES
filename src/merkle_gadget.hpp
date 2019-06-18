@@ -9,11 +9,6 @@
 #include <libsnark/gadgetlib1/protoboard.hpp>
 
 
-//#include <libsnark/gadgetlib2/variable.hpp>
-//#include <libsnark/gadgetlib1/gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/verifiers/r1cs_ppzksnark_verifier_gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/hashes/crh_gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp>
 
 
 using namespace libsnark;
@@ -30,19 +25,11 @@ const size_t sha256_digest_len = 256;
 typedef libff::alt_bn128_pp ppT;
 typedef libff::Fr<ppT> FieldT;
 
-    //const size_t SHA256_block_size = 512;
+//const size_t SHA256_block_size = 512;
 
 
 
-    /*bool sha256_padding[256] = {1,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
-        0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0};
-    */
+    
 
     template<typename FieldT>
 
@@ -57,11 +44,10 @@ public:
 
         const pb_variable_array<FieldT> input_as_field_elements; /* R1CS input */
         const pb_variable_array<FieldT> input_as_bits;  // unpacked R1CS input since these values
-        //const digest_variable<FieldT> currentDigest;
         shared_ptr<digest_variable<FieldT>> left;
         shared_ptr<digest_variable<FieldT>> right;
         shared_ptr<block_variable<FieldT>>  block;
-        shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker; //understand why we use it
+        shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker; 
         //libsnark::sha256_compression_function_gadget<FieldT> sha256; //gadget name
         shared_ptr<ssles::multiplexer_gadget<FieldT>> lhs; //gadget
         shared_ptr<ssles::multiplexer_gadget<FieldT>> rhs; //gadget
@@ -71,12 +57,11 @@ public:
         shared_ptr<digest_variable<FieldT>> pathDigest;
         shared_ptr<digest_variable<FieldT>> leafDigest;
         shared_ptr<pb_linear_combination_array<FieldT>> directionSelector;
-        pb_variable<FieldT> zero; // understand why we use it? 
-        //pb_variable_array<FieldT> padding_var;
+        pb_variable<FieldT> zero; 
         
         merkle_proof(
          protoboard<FieldT> & pb,
-                     //const size_t tree_depth,
+                    
          const digest_variable<FieldT> & rootDigest,
          const digest_variable<FieldT> & pathDigest,
          const digest_variable<FieldT> & leafDigest,
@@ -92,8 +77,7 @@ public:
 
 
 
-            // Allocate space for the verifier input which will be the public inputs, in our case, they are two elements of size 256 each
-
+            // Allocate space for the verifier input which will be the public inputs
             const size_t input_size_in_bits = sha256_digest_len * 2;
             
             {
@@ -103,7 +87,7 @@ public:
                 // we allocate space for the field elements to be of size input_size_in_field_elements
                 input_as_field_elements.allocate(pb, input_size_in_field_elements, "input_as_field_elements");
                 
-                // finally our input size to size of field elements
+               
                 this->pb.set_input_sizes(input_size_in_field_elements);
             }
             
@@ -137,8 +121,7 @@ public:
             lhs.reset(new multiplexer_gadget<FieldT>(pb, sha256_digest_len, *left, currentDirection, leafDigest, pathDigest, ".lhs"));
             rhs.reset(new multiplexer_gadget<FieldT>(pb, sha256_digest_len, *right, currentDirection, pathDigest, leafDigest, ".rhs"));
             
-            // assert(left.bits.size() == sha256_digest_len);
-            //assert(right.bits.size() == sha256_digest_len);
+           
             assert(lhs.result().bits.size() == sha256_digest_len);
             assert(rhs.result().bits.size() == sha256_digest_len);
             
@@ -151,20 +134,12 @@ public:
             /* concatenate block = left || right */
             block.insert(block.end(), left.bits.begin(), left->bits.end());
             block.insert(block.end(), right.bits.begin(), right->bits.end());
-            //block_variable<FieldT> inp(pb, path.left_digests[i], path.right_digests[i], FMT(this->annotation_prefix, " inp_%zu", i));
-            
-            
-            // Inputs are 256 bit padding and 256 bit message block
-            /* h_block.reset(new block_variable<FieldT>(in_pb, {
-             block->bits,
-             padding_var
-             }, "hash_block"));
-             */
+           
             assert(block.bits.size() == SHA256_block_size);
             
             
             // Inputs are 256 bit IV and 512 bit h_block (64 bytes)
-            // computed_root
+            
             computed_root.reset(new digest_variable<FieldT>(pb, sha256_digest_len, FMT(this->annotation_prefix, " computed_root")));
             hash.reset(new sha256_compression_function_gadget<FieldT>(pb,
               IV,
@@ -194,7 +169,7 @@ public:
               // Sanity check
             generate_r1cs_equals_const_constraint<FieldT>(this->pb, zero, FieldT::zero(), "zero");
             
-            hash->generate_r1cs_constraints(false); /* ensure correct hash computations */
+            hash->generate_r1cs_constraints(false); 
             
             // Constraint that computed_root * 1 == rootDigest which is equivalent to computed_root == rootDigest
             
@@ -214,7 +189,7 @@ public:
             // Fill our digests with our witnessed data
             leafDigest->bits.fill_with_bits(this->pb, leaf);
             directionSelector->bits.fill_with_bits(this->pb, selector);
-            //pathDigest->bits.fill_with_bits(this->pb, digest0);
+            
 
             // Set the zero pb_variable to zero
             this->pb.val(zero) = FieldT::zero();
