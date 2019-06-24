@@ -1,41 +1,33 @@
 include_directories(.)
 
 add_executable(
-merkle_proof
-merkle.hpp
+ssles_circuit
+
+ssles_circuit.cpp
 )
 target_link_libraries(
-merkle_proof
+ssles_circuit 
 
-snark
+ethsnarks_common SHA3IUF ethsnarks_gadgets ethsnarks_verify
+ff ethsnarks_jubjub ethsnarks_pinocchio ff
+ethsnarks_common
+ethsnarks_verify
+SHA3IUF
+ethsnarks_gadgets
+
+ethsnarks_jubjub
+
+
+ethsnarks_pinocchio
 )
 target_include_directories(
-merkle_proof
+ssles_circuit
 
 PUBLIC
-${DEPENDS_DIR}/libsnark
-${DEPENDS_DIR}/libsnark/depends/libfqfft
-${DEPENDS_DIR}/libsnark/depends/libff
+${DEPENDS_DIR}/ethsnarks
+${DEPENDS_DIR}/ethsnarks/depends/SHA3IUF
+${DEPENDS_DIR}/ethsnarks/depends/libsnark
+${DEPENDS_DIR}/ethsnarks/depends/libsnark/depends/libff
+${DEPENDS_DIR}/ethsnarks/depends/libsnark/depends/libfqfft
 
 )
-
-add_executable(
-preimage_proof
-preimage_proof.hpp
-)
-target_link_libraries(
-preimage_proof
-
-snark
-)
-target_include_directories(
-preimage_proof
-
-PUBLIC
-${DEPENDS_DIR}/libsnark
-${DEPENDS_DIR}/libsnark/depends/libfqfft
-${DEPENDS_DIR}/libsnark/depends/libff
-
-)
-
-
