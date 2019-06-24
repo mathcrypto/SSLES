@@ -1,0 +1,24 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/amirabouguera/SSLES/depends/ethsnarks/depends/SHA3IUF/sha3.h
+
+/Users/amirabouguera/SSLES/depends/ethsnarks/depends/SHA3IUF/sha3sum.c
+stdio.h
+-
+stdint.h
+-
+string.h
+-
+sys/types.h
+-
+stdlib.h
+-
+sha3.h
+/Users/amirabouguera/SSLES/depends/ethsnarks/depends/SHA3IUF/sha3.h
+
