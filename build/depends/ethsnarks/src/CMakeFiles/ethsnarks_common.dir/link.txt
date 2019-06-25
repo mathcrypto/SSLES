@@ -1,2 +1,0 @@
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libethsnarks_common.a  CMakeFiles/ethsnarks_common.dir/export.cpp.o CMakeFiles/ethsnarks_common.dir/import.cpp.o CMakeFiles/ethsnarks_common.dir/stubs.cpp.o CMakeFiles/ethsnarks_common.dir/utils.cpp.o CMakeFiles/ethsnarks_common.dir/sha256.c.o
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libethsnarks_common.a

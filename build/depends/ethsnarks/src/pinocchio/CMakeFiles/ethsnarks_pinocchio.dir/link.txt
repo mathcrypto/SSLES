@@ -1,2 +1,0 @@
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libethsnarks_pinocchio.a  CMakeFiles/ethsnarks_pinocchio.dir/circuit_reader.cpp.o
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libethsnarks_pinocchio.a
