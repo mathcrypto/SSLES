@@ -18,8 +18,11 @@ else()
   endif()
 endif()
 
-
-
-add_executable(ssles_circuit ssles_circuit.cpp)
+add_library(ssles_circuit SHARED ssles_circuit.cpp)
 target_link_libraries(ssles_circuit ethsnarks_common SHA3IUF)
+set_property(TARGET ssles_circuit PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET ssles_circuit PROPERTY CXX_STANDARD 11)
+
+add_executable(ssles_cli ssles_cli.cpp)
+target_link_libraries(ssles_cli ethsnarks_common SHA3IUF)
+set_property(TARGET ssles_cli PROPERTY CXX_STANDARD 11)
