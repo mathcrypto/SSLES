@@ -1,7 +1,7 @@
 #include <iostream> // cerr
 #include <fstream>  // ifstream,ofstream
 
-#include "ssles.cpp"
+#include "ssles_circuit.cpp"
 #include <stubs.hpp>
 #include <utils.hpp> // hex_to_bytes
 

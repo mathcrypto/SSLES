@@ -254,7 +254,7 @@ namespace ssles {
     void generate_r1cs_witness(
         const FieldT & in_root,  // merkle tree root
         const libff::bit_vector & in_hash_sig,
-        const FieldT & in_pubkey,     // pk is a field element, check?
+        const FieldT & in_pubkey,     
         const libff::bit_vector & in_address,
         const std::vector<FieldT> & in_path,
         const std::vector<FieldT> & in_m,
@@ -343,7 +343,6 @@ char* ssles_nullifier( const char *pubkey, const char *leaf_index )
 static char *ssles_prove_internal(
     const char *pk_file,
     const FieldT arg_root,
-    const FieldT arg_exthash,
     const FieldT arg_secret,
     const libff::bit_vector address_bits,
     const std::vector<FieldT> arg_path
@@ -353,7 +352,7 @@ static char *ssles_prove_internal(
     ProtoboardT pb;
     ssles::ssles_circuit mod(pb, "ssles");
     mod.generate_r1cs_constraints();
-    mod.generate_r1cs_witness(arg_root, arg_exthash, arg_secret, address_bits, arg_path);
+    mod.generate_r1cs_witness(arg_root, arg_secret, address_bits, arg_path);
    // check if circuit is satisfied
     if( ! pb.is_satisfied() )
     {
@@ -367,7 +366,7 @@ static char *ssles_prove_internal(
     const auto proof_as_json = ethsnarks::stub_prove_from_pb(pb, pk_file);
     return ::strdup(proof_as_json.c_str());
 }
-// why do we have prove and prove internal???
+
 
 char *ssles_prove_json( const char *pk_file, const char *in_json )
 {
@@ -376,7 +375,7 @@ char *ssles_prove_json( const char *pk_file, const char *in_json )
     const auto root = json::parse(in_json);
     const auto arg_root = ethsnarks::parse_FieldT(root.at("root"));
     const auto arg_secret = ethsnarks::parse_FieldT(root.at("secret")); 
-    //const auto arg_exthash = ethsnarks::parse_FieldT(root.at("exthash"));
+
 
     const auto arg_path = ethsnarks::create_F_list(root.at("path"));
     if( arg_path.size() != SSLES_TREE_DEPTH )
@@ -398,26 +397,25 @@ char *ssles_prove_json( const char *pk_file, const char *in_json )
     return ssles_prove_internal(pk_file, arg_root, arg_secret, address_bits, arg_path);
 }
 
-// and why we have prove as well in addition to prove_internal and prove_json?? ah in prove_json we have 
-//pk_file and vk_file as parameters but in prove we have pk_file with the prover inputs
+
 char *ssles_prove(
     const char *pk_file,
     const char *in_root,
-    const char *in_secret,
+    const char *in_pubkey,
     const char *in_address,
     const char **in_path
     ) {
     ppT::init_public_params();
 
     const FieldT arg_root(in_root);
-    const FieldT arg_secret(in_secret);
+    const FieldT arg_secret(in_pubkey);
 
     // Fill address bits with 0s and 1s from str
     // XXX: populate bits from integer (offset of the leaf in the merkle tree)
     //      parse integer from string, rather than passing as unsigned?
     libff::bit_vector address_bits;
     address_bits.resize(SSLES_TREE_DEPTH);
-    // what is this?
+
     if( strlen(in_address) != SSLES_TREE_DEPTH )
     {
         std::cerr << "Address length doesnt match depth" << std::endl;
@@ -440,7 +438,7 @@ char *ssles_prove(
         arg_path[i] = FieldT(in_path[i]);
     }
 
-    return ssles_prove_internal(pk_file, arg_root, arg_exthash, arg_secret, address_bits, arg_path);
+    return ssles_prove_internal(pk_file, arg_root, arg_secret, address_bits, arg_path);
 }
 
 
