@@ -20,13 +20,12 @@ static int main_prove( int argc, char **argv )
 {  // compute number of arguments we have and define this function correctly
     if( argc < (9 + (int)SSLES_TREE_DEPTH) )
     {
-        cerr << "Usage: " << argv[0] << " prove <pk.raw> <proof.json> <public:root> <public:nullifier> <public:exthash> <secret:secret> <secret:merkle-address> <secret:merkle-path ...>" << endl;
+        cerr << "Usage: " << argv[0] << " prove <pk.raw> <proof.json> <public:root> <public:nullifier>  <secret:pubkey> <secret:merkle-address> <secret:merkle-path ...>" << endl;
         cerr << "Args: " << endl;
         cerr << "\t<pk.raw>         Path to proving key" << endl;
         cerr << "\t<proof.json>     Write proof to this file" << endl;
         cerr << "\t<root>           Merkle tree root" << endl;
-        cerr << "\t<exthash>        Hash of external variables" << endl;
-        cerr << "\t<secret>         Spend secret" << endl;
+        cerr << "\t<pubkey>         Spend public key" << endl;
         cerr << "\t<merkle-address> 0 and 1 bits for tree path" << endl;
         cerr << "\t<merkle-path...> items for merkle tree path" << endl;
         return 1;
@@ -35,16 +34,15 @@ static int main_prove( int argc, char **argv )
     auto pk_filename = argv[2];
     auto proof_filename = argv[3];
     auto arg_root = argv[4];
-    auto arg_exthash = argv[5];
-    auto arg_secret = argv[6];
-    auto arg_address = argv[7];
+    auto arg_secret = argv[5];
+    auto arg_address = argv[6];
     
     const char *arg_path[SSLES_TREE_DEPTH];
     for( size_t i = 0; i < SSLES_TREE_DEPTH; i++ ) {
         arg_path[i] = argv[9 + i];
     }
 
-    auto proof_json = ssles_prove(pk_filename, arg_root, arg_exthash, arg_secret, arg_address, arg_path);
+    auto proof_json = ssles_prove(pk_filename, arg_root, arg_secret, arg_address, arg_path);
     if( proof_json == nullptr ) {
         std::cerr << "Failed to prove\n";
         return 1;
@@ -68,7 +66,7 @@ void read_all_file (const std::string &filename, std::string &out) {
     fh.seekg(0, std::ios::beg);
 
     out.assign((std::istreambuf_iterator<char>(fh)),
-                std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 }
 
 

@@ -49,7 +49,7 @@ const size_t SSLES_TREE_DEPTH = 29;
 
 
 
- namespace ssles {
+namespace ssles {
 
 
   /* This class implements the following circuit:
@@ -84,18 +84,18 @@ const size_t SSLES_TREE_DEPTH = 29;
 
 
 */ 
-  template<typename FieldT>
+  //template<typename FieldT>
 
   class ssles_circuit : public gadget<FieldT>
-    {
-        public:
+  {
+  public:
 
     // Constructor
 
    //MiMC: Efficient Encryption and Cryptographic Hashing with Minimal Multiplicative Complexity
     typedef MiMC_hash_gadget mimc_hash; 
     //typedef shared_ptr<sha256_compression_function_gadget<FieldT>> sha256_gadget; /* hashing gadget */
-  
+
     const size_t tree_depth = SSLES_TREE_DEPTH;
 
 
@@ -103,14 +103,14 @@ const size_t SSLES_TREE_DEPTH = 29;
     
     const Params& in_params;  // params a and d from Edward curve
     const EdwardsPoint& in_base;    // B
-    const VariablePointT& in_R;     // R=r.B
+    const VariablePointT& R;     // R=r.B
     const VariableArrayT msg; // public random number m
 
     const VariableT pub_hash_var; // used to reduce public inputs size
     const VariableT root_var;
     const VariableArrayT m_IVs; // values from merkle_tree.cpp
     const VariableT hash_var; // hash_var= H(signed(m))
-    
+    const VariableT zero;
     // private inputs
 
     const VariablePointT pk; //  public key   pk=s.B
@@ -126,7 +126,7 @@ const size_t SSLES_TREE_DEPTH = 29;
     mimc_hash pub_hash;
     mimc_hash leaf_hash;
     mimc_hash hash_preimage;
-  
+
     ethsnarks::merkle_path_authenticator<mimc_hash> m_auth;
     /* merkle_path_authenticator(
         ProtoboardT &in_pb,
@@ -139,7 +139,7 @@ const size_t SSLES_TREE_DEPTH = 29;
         const std::string &in_annotation_prefix = ""
     ) :
     */
-   ethsnarks::EdDSA_Verify eddsa_verify; 
+    ethsnarks::EdDSA_Verify eddsa_verify; 
   /* EdDSA_Verify::EdDSA_Verify(
     ProtoboardT& in_pb,
     const Params& in_params,
@@ -152,28 +152,28 @@ const size_t SSLES_TREE_DEPTH = 29;
 ) :
 */
     
-     ssles_circuit(
-                     protoboard<FieldT> &in_pb,
-                    
-                     const std::string &annotation_prefix
-                     
-           
-                     ) :
-        gadget<FieldT>(in_pb, "ssles_gadget")
+    ssles_circuit(
+     protoboard<FieldT> &in_pb,
+
+     const std::string &annotation_prefix
 
 
-   {     
-     
-        msg(make_variable(in_pb,  ".msg"));
+     ) :
+    gadget<FieldT>(in_pb, "ssles_gadget")
+
+
+    {     
+
+        msg(make_var_array(in_pb,  ".msg"));
         in_R(make_variable(in_pb,  ".msg"));
 
         pub_hash_var(make_variable(in_pb, ".pub_hash_var"));
 
         root_var(make_variable(in_pb,  ".root_var"));
-      
+
         hash_var(make_variable(in_pb,  ".hash_var"));
         
-         
+
         // IV for SHA256
         m_IVs(merkle_tree_IVs(in_pb));
 
@@ -188,36 +188,38 @@ const size_t SSLES_TREE_DEPTH = 29;
         s(make_var_array(in_pb, ".s"));
         
         
-      
+
 
         // nullifier = H(address_bits, pk)
         nullifier_hash(in_pb, zero, {address_bits->packed, pk}, FMT(annotation_prefix, ".nullifier_hash"));
 
-        // pub_hash = H(root, nullifier)
-        pub_hash(in_pb, zero, {root_var, nullifier_hash.result()}, FMT(annotation_prefix, ".pub_hash"));
+       
+
+        // pub_hash = H(root, nullifier, msg, hash_var)
+        pub_hash(in_pb, zero, {root_var, nullifier_hash.result(), msg, hash_var}, FMT(annotation_prefix, ".pub_hash"));
 
         // leaf_hash = H(pk)
         leaf_hash(in_pb, zero, {pk}, ".leaf_hash");
-
-        // hash_preimage = H(signature)
+         // hash_preimage = H(signature)
         hash_preimage(in_pb, zero, {signature}, ".hash_preimage");
+
 
         // assert merkle_path_authenticate(leaf_hash, path, root)
         m_auth(in_pb, tree_depth, address_bits->bits, m_IVs, leaf_hash.result(), root_var, path_var, ".authenticator");
 
         // assert eddsa_verify(pk, msg, signature)
         eddsa_verify(in_pb, in_params, in_base, pk, R, s, msg, ".sig verification");
-       
-   
-    {
+
+
+        {
         // Only one public input variable is passed, which is `pub_hash`
-        
-        in_pb.set_input_sizes( 1 );
 
-        
+            in_pb.set_input_sizes( 1 );
+
+
+        }
+
     }
-
-}
     void generate_r1cs_constraints()
 
 
@@ -238,7 +240,7 @@ const size_t SSLES_TREE_DEPTH = 29;
 
         // ensure correct hash computations 
         this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(hash_var, FieldT::one(), hash_preimage.result()), "Enforce valid proof");
-     
+
         // Enforce zero internally
         this->pb.add_r1cs_constraint(
             r1cs_constraint<FieldT>(zero, zero, zero - zero),
@@ -250,53 +252,68 @@ const size_t SSLES_TREE_DEPTH = 29;
     } 
 
     void generate_r1cs_witness(
-        const FieldT & root,         // merkle tree root
-        const libff::bit_vector & hash_sig,
-        const FieldT & pubkey,     // pk is a field element, check?
-        const libff::bit_vector & address,
-        const std::vector<FieldT> & path,
-        const libff::bit_vector & sig
-       
-    ) {
+        const FieldT & in_root,  // merkle tree root
+        const libff::bit_vector & in_hash_sig,
+        const FieldT & in_pubkey,     // pk is a field element, check?
+        const libff::bit_vector & in_address,
+        const std::vector<FieldT> & in_path,
+        const std::vector<FieldT> & in_m,
+        const FieldT& in_R,     // R=r.B
+        const std::vector<FieldT> & in_s,
+        const libff::bit_vector & in_sig
 
-      
+        ) {
+        
+        // public inputs
+
+        this->pb.val(msg) = in_m;
+        this->pb.val(R) = in_R;
         // hashed public inputs
-        this->pb.val(root_var) = root;
-        this->pb.val(external_hash_var) = exthash;
+        this->pb.val(root_var) = in_root;
+        this->pb.val(hash_var) = in_hash_sig;
+
 
         // Set pk to pubkey
-        this->pb.val(pk) = pubkey;
+        this->pb.val(pk) = in_pubkey;
+        this->pb.val(s) = in_s;
+        this->pb.val(signature) = in_sig;
 
         // Fill our digests with our witnessed data
-        address_bits->bits.fill_with_bits(this->pb, address);
+        address_bits->bits.fill_with_bits(this->pb, in_address);
         address_bits->generate_r1cs_witness_from_bits();
 
         nullifier_hash.generate_r1cs_witness();
 
-        // public hash
-        this->pb.val(pub_hash_var) = mimc_hash({root, this->pb.val(nullifier_hash.result()), exthash});
+        // public hash= H(root, nullifier, msg, hash_var)
+        this->pb.val(pub_hash_var) = mimc_hash({in_root, this->pb.val(nullifier_hash.result()), in_m, in_hash_sig});
         
 
         pub_hash.generate_r1cs_witness();
 
         for( size_t i = 0; i < tree_depth; i++ )
         {
-            this->pb.val(path_var[i]) = path[i];
+            this->pb.val(path_var[i]) = in_path[i];
         }
 
         leaf_hash.generate_r1cs_witness();
         m_auth.generate_r1cs_witness();
+        hash_preimage.generate_r1cs_witness();
+        eddsa_verify.generate_r1cs_witness();
     }
 };
-// 
-   } 
+// namespace ssles
+} 
 
-// why do we need this function?
-   size_t ssles_tree_depth( void ) {
+//using ethsnarks::ppT;
+//using ethsnarks::ProtoboardT;
+using namespace ssles;
+using ssles::ssles_circuit;
+
+size_t ssles_tree_depth( void ) {
     return SSLES_TREE_DEPTH;
 }
 
-// why do we need this function?
+
 char* ssles_nullifier( const char *pubkey, const char *leaf_index )
 {
     ppT::init_public_params();
@@ -306,8 +323,7 @@ char* ssles_nullifier( const char *pubkey, const char *leaf_index )
     const FieldT arg_result(ethsnarks::mimc_hash({arg_index, arg_secret}));
 
     // Convert result to mpz
-    // what is mpz???
-    // what is bigint???
+    
     const auto result_bigint = arg_result.as_bigint();
     mpz_t result_mpz;
     mpz_init(result_mpz);
@@ -315,7 +331,7 @@ char* ssles_nullifier( const char *pubkey, const char *leaf_index )
 
     // Convert to string
 
-    // why convert to mpz and then string??
+
     char *result_str = mpz_get_str(nullptr, 10, result_mpz);
     assert( result_str != nullptr );
     mpz_clear(result_mpz);
@@ -331,11 +347,11 @@ static char *ssles_prove_internal(
     const FieldT arg_secret,
     const libff::bit_vector address_bits,
     const std::vector<FieldT> arg_path
-)
+    )
 {
     // Create protoboard with gadget
     ProtoboardT pb;
-   ssles::ssles_circuit mod(pb, "ssles");
+    ssles::ssles_circuit mod(pb, "ssles");
     mod.generate_r1cs_constraints();
     mod.generate_r1cs_witness(arg_root, arg_exthash, arg_secret, address_bits, arg_path);
    // check if circuit is satisfied
@@ -390,7 +406,7 @@ char *ssles_prove(
     const char *in_secret,
     const char *in_address,
     const char **in_path
-) {
+    ) {
     ppT::init_public_params();
 
     const FieldT arg_root(in_root);
