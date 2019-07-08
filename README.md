@@ -35,6 +35,10 @@ Secret parameters:
 
 # Build instructions
 
+git clone https://github.com/HarryR/ethsnarks.git``
+``cd ethsnarks``
+``make``
+
 
 To compile the library, tests, and profiling harness, run this within the SSLES directory:
 
