@@ -1,3 +1,0 @@
-file(REMOVE_RECURSE
-  "libSHA3IUF.a"
-)
