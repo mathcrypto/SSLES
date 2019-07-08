@@ -1,19 +1,11 @@
 //Merkle tree proof of depth 1
-
-#include <libsnark/gadgetlib1/gadget.hpp>
 #include <libsnark/gadgetlib1/gadgets/basic_gadgets.hpp>
 #include "multiplexer_gadget.hpp" //Multiplexer gadget
 #include <libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_gadget.hpp>
 #include <libff/algebra/fields/field_utils.hpp>
 #include <libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp>
-#include <libsnark/gadgetlib1/protoboard.hpp>
 
 
-//#include <libsnark/gadgetlib2/variable.hpp>
-//#include <libsnark/gadgetlib1/gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/verifiers/r1cs_ppzksnark_verifier_gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/hashes/crh_gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp>
 
 
 using namespace libsnark;
@@ -22,17 +14,27 @@ using namespace libff;
 using namespace ssles;
 
 
+/*
+       For Merkle tree authentication paths, path[0] corresponds to one layer below
+       the root (and path[tree_depth-1] corresponds to the layer containing the leaf), while address_bits has the reverse order:
+       address_bits[0] is LSB, and corresponds to layer containing the leaf, and address_bits[tree_depth-1] is MSB, and corresponds to
+       the subtree directly under the root.
+    */
 
 
 
-
-const size_t sha256_digest_len = 256;
 typedef libff::alt_bn128_pp ppT;
 typedef libff::Fr<ppT> FieldT;
+typedef libsnark::pb_variable<FieldT> VariableT;
+typedef libsnark::pb_variable_array<FieldT> VariableArrayT;
+typedef libsnark::pb_linear_combination<FieldT> LinearCombinationT;
+typedef libsnark::pb_linear_combination_array<FieldT> LinearCombinationArrayT;
+typedef libsnark::gadget<ethsnarks::FieldT> GadgetT;
+typedef libsnark::r1cs_constraint<FieldT> ConstraintT;
 
-    //const size_t SHA256_block_size = 512;
-
-
+const size_t sha256_digest_len = 256;
+//const size_t SHA256_block_size = 512;
+ 
 
     /*bool sha256_padding[256] = {1,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
@@ -55,32 +57,52 @@ public:
 
 
 
-        const pb_variable_array<FieldT> input_as_field_elements; /* R1CS input */
-        const pb_variable_array<FieldT> input_as_bits;  // unpacked R1CS input since these values
-        //const digest_variable<FieldT> currentDigest;
-        shared_ptr<digest_variable<FieldT>> left;
-        shared_ptr<digest_variable<FieldT>> right;
-        shared_ptr<block_variable<FieldT>>  block;
-        shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker; //understand why we use it
-        //libsnark::sha256_compression_function_gadget<FieldT> sha256; //gadget name
-        shared_ptr<ssles::multiplexer_gadget<FieldT>> lhs; //gadget
-        shared_ptr<ssles::multiplexer_gadget<FieldT>> rhs; //gadget
-        shared_ptr<sha256_compression_function_gadget<FieldT>> hash; //gadget
-        shared_ptr<digest_variable<FieldT> > computed_root; 
-        shared_ptr<digest_variable<FieldT>> rootDigest;
-        shared_ptr<digest_variable<FieldT>> pathDigest;
-        shared_ptr<digest_variable<FieldT>> leafDigest;
+        const VariableT input_as_field_elements; /* R1CS input */
+        const VariableT input_as_bits;  // unpacked R1CS input 
+        typedef shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker; 
+        typedef shared_ptr<sha256_two_to_one_hash_gadget<FieldT>> sha256_gadget; 
+        const size_t tree_depth;
+        const VariableArrayT pathDigest;
+        const VariableT leafDigest;
+        const VariableT rootDigest;
+        const VariableT computed_root; 
+        std::vector<ssles::multiplexer_gadget> multiplexer;
         shared_ptr<pb_linear_combination_array<FieldT>> directionSelector;
-        pb_variable<FieldT> zero; // understand why we use it? 
-        //pb_variable_array<FieldT> padding_var;
+        std::vector<sha256_two_to_one_hash_gadget<FieldT>> hashers; //sha256 gadgets
+        std::vector<block_variable<FieldT> > hash_inputs; /* 512 bit block that contains preimage + padding */
+        pb_variable_array<FieldT> padding_var;
+        pb_variable<FieldT> zero; 
+        // const VariableArrayT m_address_bits;
+        
+       
+       
+      
+       
+        // std::vector<merkle_path_selector> m_selectors;
+        
+        //std::vector<ssles::multiplexer_gadget<FieldT>> lhs; //gadget
+        //shared_ptr<ssles::multiplexer_gadget<FieldT>> rhs; //gadget
+       
+      
+        //shared_ptr<digest_variable<FieldT>> left;
+        //shared_ptr<digest_variable<FieldT>> right;
+        
+      
+       
+       
         
         merkle_proof(
          protoboard<FieldT> & pb,
-                     //const size_t tree_depth,
-         const digest_variable<FieldT> & rootDigest,
-         const digest_variable<FieldT> & pathDigest,
-         const digest_variable<FieldT> & leafDigest,
+         const size_t tree_depth,
+         const VariableT & rootDigest,
+         //const VariableT in_expected_root,
+         const VariableArrayT & pathDigest,
+         //const VariableArrayT in_path,
+         const VariableT & leafDigest,
+         //const VariableT in_leaf,
          const pb_linear_combination_array<FieldT> & directionSelector,
+         //const VariableArrayT in_IVs
+         //const VariableArrayT in_address_bits,
          const string &annotation_prefix
 
 
@@ -90,9 +112,12 @@ public:
         gadget<FieldT>(pb, "merkle_proof_gadget")
         {
 
+           assert( in_depth > 0 );
+           assert( in_address_bits.size() == in_depth ); //makes sense
+           assert( in_IVs.size() >= in_depth ); // what is this?
 
 
-            // Allocate space for the verifier input which will be the public inputs, in our case, they are two elements of size 256 each
+        /*    // Allocate space for the verifier input which will be the public inputs, in our case, they are two elements of size 256 each
 
           const size_t input_size_in_bits = sha256_digest_len * 2;
           
@@ -122,8 +147,69 @@ public:
           
           unpacker.reset(new multipacking_gadget<FieldT>(pb, input_as_bits, input_as_field_elements, FieldT::capacity(), FMT(this->annotation_prefix, " unpacker")));
           
+         */
+
+         for( size_t i = 0; i < tree_depth; i++ )
+        {
+            if( i == 0 )
+            {  //multiplexer gadget
+                multiplexer<FieldT>(
+                    pb, sha256_digest_len, *output[i], in_address_bits[i], leafDigest, pathDigest[i], ".selector[%zu]", i);
+
+               // lhs.reset(new multiplexer_gadget<FieldT>(pb, sha256_digest_len, *left, currentDirection, leafDigest, pathDigest, ".lhs"));
+               // rhs.reset(new multiplexer_gadget<FieldT>(pb, sha256_digest_len, *right, currentDirection, pathDigest, leafDigest, ".rhs"));
           
+            }
+            else {
+                m_selectors.push_back(
+                    merkle_path_selector(
+                        in_pb, m_hashers[i-1].result(), in_path[i], in_address_bits[i], // instead of leaf we take the result of previous hash
+                        FMT(this->annotation_prefix, ".selector[%zu]", i)));
+            }
+
+            auto t = HashT( // this computes the hash with left and right digests and IV
+                    in_pb, in_IVs[i],
+                    {m_selectors[i].left(), m_selectors[i].right()},
+                    FMT(this->annotation_prefix, ".hasher[%zu]", i));
+           /* hash.reset(new sha256_compression_function_gadget<FieldT>(pb,
+            IV, // IV of i
+            block->bits, // block of i of left and right digests
+            *computed_root,
+            FMT(this->annotation_prefix, "computed_root")));
+          */
+            m_hashers.push_back(t); // what is push_back?
+        }
+    }
+
+     for (size_t i = 0; i < tree_depth; ++i)
+    {
+        
+        //  The propagators take a computed hash value (or leaf in the
+         // base case) and propagate it one layer up, either in the left
+         // or the right slot of authentication_path_variable.
+        
+        propagators.emplace_back(digest_selector_gadget<FieldT>(pb, digest_size, i < tree_depth - 1 ? internal_output[i] : leaf,
+                                                                address_bits[tree_depth-1-i], path.left_digests[i], path.right_digests[i],
+                                                                FMT(this->annotation_prefix, " digest_selector_%zu", i)));
+    }
+
+    check_root.reset(new bit_vector_copy_gadget<FieldT>(pb, computed_root->bits, root.bits, read_successful, FieldT::capacity(), FMT(annotation_prefix, " check_root")));
+} */
+ const VariableT result() const
+    {
+        assert( m_hashers.size() > 0 );
+
+        return m_hashers.back().result();
+    }
+// hashers take the result and use it in the next gadget
           
+        
+
+
+
+
+
+
           const size_t currentDirection = 0;
           
           
@@ -200,7 +286,10 @@ public:
           
           this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1, computed_root, rootDigest), "Enforce valid proof");
           
-          
+          // Ensure root matches calculated path hash
+        this->pb.add_r1cs_constraint(
+            ConstraintT(this->result(), 1, m_expected_root),
+            FMT(this->annotation_prefix, ".expected_root authenticator"));
           
           
         }
@@ -278,3 +367,5 @@ public:
 
        return input_as_field_elements;
      }
+
+    

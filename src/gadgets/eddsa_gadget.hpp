@@ -28,7 +28,6 @@ The signature of a message M under a private key k is the 2*b-bit string ENC(R) 
    */
 
     /* Verify
-
    To verify an edDSA signature ENC(R) || ENC(S) on a message M under
    a public key ENC(A), we proceed as follows:
   - Parse the inputs so that A and R are elements of E, and S is a member of the set {0, 1, ..., L-1}. 
@@ -36,7 +35,6 @@ The signature of a message M under a private key k is the 2*b-bit string ENC(R) 
    equation [2^c * S] B = 2^c * R + [2^c * h] A in E.  The signature is
    rejected if parsing fails (including S being out of range) or if the
    group equation does not hold.
-
    EdDSA verification for a message M is defined as PureEdDSA
    verification for PH(M).
    */
@@ -56,7 +54,6 @@ typedef libsnark::pb_variable_array<FieldT> VariableArrayT;
     0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
     0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,1, 0,0,0,0,0,0,0,0};
-
 */
 
 

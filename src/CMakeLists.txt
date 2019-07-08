@@ -1,37 +1,25 @@
-include_directories(.)
+cmake_minimum_required(VERSION 2.8)
+project(ssles)
+add_subdirectory(../depends/ethsnarks ../.build/ethsnarks EXCLUDE_FROM_ALL)
 
-add_executable(
-main
+if (CMAKE_VERSION VERSION_GREATER "3.0")
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON) #...is required...
+else()
+  include(CheckCXXCompilerFlag)
+  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 
-main.cpp
-)
-target_link_libraries(
-main 
-
- ethsnarks_common SHA3IUF ethsnarks_gadgets ethsnarks_verify
-ff ethsnarks_jubjub ethsnarks_pinocchio ff
-ethsnarks_common
-ethsnarks_verify
-SHA3IUF
-ethsnarks_gadgets
-
-ethsnarks_jubjub
-
-
-ethsnarks_pinocchio
-)
-target_include_directories(
-main
-
-PUBLIC
-${DEPENDS_DIR}/ethsnarks
-${DEPENDS_DIR}/ethsnarks/depends/SHA3IUF
-${DEPENDS_DIR}/ethsnarks/depends/libsnark
-${DEPENDS_DIR}/ethsnarks/depends/libsnark/depends/libff
-${DEPENDS_DIR}/ethsnarks/depends/libsnark/depends/libfqfft
-
-)
+  if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  elseif(COMPILER_SUPPORTS_CXX0X)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+  else()
+        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+  endif()
+endif()
 
 
 
-
+add_executable(ssles_circuit ssles_circuit.cpp)
+target_link_libraries(ssles_circuit ethsnarks_common SHA3IUF)
+set_property(TARGET ssles_circuit PROPERTY CXX_STANDARD 11)

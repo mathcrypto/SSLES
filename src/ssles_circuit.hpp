@@ -1,49 +1,63 @@
-//
-// ssles_circuit.hpp
-//  src
-//
-//  Created by Amira Bouguera on 27/05/2019.
-//  Copyright © 2019 Amira Bouguera. All rights reserved.
-
 #ifndef SSLES_CIRCUIT_HPP_
 #define SSLES_CIRCUIT_HPP_
 
+#pragma once
 
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <libsnark/gadgetlib1/protoboard.hpp>
 #include <libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp>
 #include <libff/algebra/fields/field_utils.hpp>
 
 
 
-#pragma once
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
 
 
 
-typedef libff::alt_bn128_pp ppT;
-typedef libff::Fr<ppT> FieldT; 
-    
+	typedef libff::alt_bn128_pp ppT;
+	typedef libff::Fr<ppT> FieldT; 
+	
+const extern size_t SSLES_TREE_DEPTH;
+
+/**
+* Prover inputs is a JSON dictionary with the following structure:
+* {
+*    "root": "0x..",     // Merkle root
+*    "exthash": "0x...", // Hash of external arguments 
+*    "secret": "0x...",  // Secret for the leaf
+*    "address": 1234,    // Index of the leaf, or address of the leaf in the tree
+*    "path": ["0x...", "0x...", ...] // Merkle tree authentication path
+* }
+*
+* Returns proof as JSON string
+*/
+char *ssles_prove_json( const char *pk_file, const char *in_json );
 
 
-//char *ssles_circuit_prove( const char *pk_file, libff::bit_vector leaf, libff::bit_vector digest, libff::bit_vector Selector, libff::bit_vector root, const libsnark::pb_linear_combination<FieldT> successful);
-    
+char *ssles_prove(
+    const char *pk_file,
+    const char *in_root,
+    const char *in_exthash,
+    const char *in_secret,
+    const char *in_address,
+    const char **in_path
+);
 
+int ssles_genkeys( const char *pk_file, const char *vk_file );
 
-int ssles_circuit_genkeys( const char *pk_file, const char *vk_file );
+bool ssles_verify( const char *vk_json, const char *proof_json );
 
+char* ssles_nullifier( const char *in_secret, const char *in_leaf_index );
 
-bool ssles_circuit_verify( const char *vk_json, const char *proof_json );
+size_t ssles_tree_depth( void );
 
 #ifdef __cplusplus
-} // extern "C"
+} // extern "C" {
 #endif
 
-// SSLES_CIRCUIT_HPP_
 #endif

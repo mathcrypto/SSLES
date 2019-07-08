@@ -1,300 +1,440 @@
-//
-//  main.cpp
-//  src
-//
-//  Created by Amira Bouguera on 27/05/2019.
-//  Copyright © 2019 Amira Bouguera. All rights reserved.
-//
+#include "ssles_circuit.hpp"
+
+// libsnark gadgets
 
 
-#include "merkle.hpp"
-//#include "../depends/multiplexer_gadget.tcc" //Multiplexer gadget
-#include <ethsnarks/src/jubjub/eddsa.hpp>
-#include <ethsnarks-hashpreimage/circuit/hashpreimage.cpp>
-//#include "../gadgets/ethsnarks/src/jubjub/eddsa.cpp"
-//#include <libsnark/gadgetlib1/gadgets/hashes/digest_selector_gadget.hpp>
-//#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_authentication_path_variable.hpp>
+#include <libsnark/gadgetlib1/gadgets/basic_gadgets.hpp> // for multipacking gadget
+//#include <libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_gadget.hpp>
+#include <libff/algebra/fields/field_utils.hpp> 
+#include <libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp> 
+#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_authentication_path_variable.hpp>
+
+
+// ethsnarks gadgets
+
+
+#include <export.hpp> 
+#include <import.hpp> 
+#include <stubs.hpp>  
+#include <utils.hpp>  
+
+#include <gadgets/merkle_tree.cpp> // merkle tree gadget
+#include <jubjub/eddsa.cpp>   // eddsa signature gadget
+#include "gadgets/mimc.hpp" // hashing gadget
 
 
 
-using namespace libsnark;
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
+//#include "gadgets/preimage_proof_gadget.hpp" 
 
 using namespace std;
+using namespace libff;
+using namespace libsnark;
+using namespace ethsnarks;
+using libsnark::dual_variable_gadget;
+using ethsnarks::jubjub::VariablePointT;
+using ethsnarks::jubjub::EdwardsPoint;
+using ethsnarks::jubjub::Params;
+using ethsnarks::bytes_to_bv;
 
-//using namespace ethsnarks;
-using ethsnarks::jubjub::PureEdDSA;  // signature gadget
-using ssles::merkle_proof; // merkle proof gadget
-using ethsnarks::mod_hashpreimage; // hash preimage gadget
+typedef libff::alt_bn128_pp ppT;
+typedef libff::Fr<ppT> FieldT;
 
 
-namespace ssles {
-    
-    
-    
-    
-   //const size_t sha256_digest_len = 256;
+//const size_t sha256_digest_len = 256;  
+
+const size_t SSLES_TREE_DEPTH = 29; 
+
+
+
+ namespace ssles {
+
+
+  /* This class implements the following circuit:
+
+    1. The public key 'pk' belongs to one of the participants: the Merkle path path_var leads from the public key pk hash to the root hash root.
+    --> assert root == merkle_authenticate(path_var, address_bits, leaf_hash) # where leaf_hash= H(pk).
+
+    2. Signed(m) checks out against the public key pk and the random number m. 
+    --> assert eddsa_verify(pk, m, signature)
+
+    3. H(signed(m)) given in the public parameters is the hash of signed(m) given in the secret parameters. 
+    --> assert hash == H(signed(m))  #prove knowledge of the preimage
+
+    4. Signed(m) in the secret parameters is the same `m given in the public parameters.
+    --> Signature verification
     
 
-    
-    template<typename FieldT>
-    
-    class ssles_circuit : public gadget<FieldT>
+#The input parameters are:
+
+##Public parameters:
+*  - `root_var` (hashed-public): The roothash of all the participants’ public keys
+*  - `nullifier` (hashed-public): double-spend uniqueness tag 
+*  - `pub_hash_var` (public): Used to reduce the number of public inputs 
+*  -  'msg' A public random number (emitted by the random beacon).
+*  - 'hash_var' The hash of the signed message m.
+
+##Secret parameters:
+*  - 'pk' The signer’s public key which proves the owner belongs to an authorized group 
+*  - `address_bits` leaf offset (in bits, little-endian)
+*  - `path_var` merkle authentication path array
+*  - 'signed(m)' the signature of the message m by each participant
+
+
+*/ 
+  template<typename FieldT>
+
+  class ssles_circuit : public gadget<FieldT>
     {
-        
-        
-    public:
-        // Constructor
-        
-       
-        
-        
-        const pb_variable_array<FieldT> input_as_field_elements; /* R1CS input */
-        const pb_variable_array<FieldT> input_as_bits;  // unpacked R1CS input since these values
-        libsnark::multipacking_gadget<FieldT> packer;
-        libsnark::sha256_compression_function_gadget<FieldT> sha256;
-        //snarks::ethsnarks::jubjub::PureEdDSA<FieldT> sign;
-        std::shared_ptr<PureEdDSA<FieldT>> sig; //gadget
-        std::shared_ptr<mod_hashpreimage<FieldT>> hash; //gadget
-        std::shared_ptr<sha256_compression_function_gadget<FieldT>> root; //gadget
-        std::shared_ptr<digest_variable<FieldT> > computed_hash;
-        std::shared_ptr<digest_variable<FieldT> > computed_root;
-        std::shared_ptr<digest_variable<FieldT> > signed_msg;
-        pb_variable<FieldT> zero;
+        public:
+
+    // Constructor
+
+   //MiMC: Efficient Encryption and Cryptographic Hashing with Minimal Multiplicative Complexity
+    typedef MiMC_hash_gadget mimc_hash; 
+    //typedef shared_ptr<sha256_compression_function_gadget<FieldT>> sha256_gadget; /* hashing gadget */
+  
+    const size_t tree_depth = SSLES_TREE_DEPTH;
+
+
+    // public inputs 
     
-        
-        ssles_circuit(
+    const Params& in_params;  // params a and d from Edward curve
+    const EdwardsPoint& in_base;    // B
+    const VariablePointT& in_R;     // R=r.B
+    const VariableArrayT msg; // public random number m
+
+    const VariableT pub_hash_var; // used to reduce public inputs size
+    const VariableT root_var;
+    const VariableArrayT m_IVs; // values from merkle_tree.cpp
+    const VariableT hash_var; // hash_var= H(signed(m))
+    
+    // private inputs
+
+    const VariablePointT pk; //  public key   pk=s.B
+    const VariableArrayT& s; // s
+    const VariableT signature; // Signature= (S,R)
+    const VariableArrayT path_var;
+    shared_ptr<libsnark::dual_variable_gadget<FieldT>> address_bits;
+    //libsnark::dual_variable_gadget<FieldT> address_bits;
+    
+
+    // logic gadgets
+    mimc_hash nullifier_hash; //# Prove that nullifier matches public input
+    mimc_hash pub_hash;
+    mimc_hash leaf_hash;
+    mimc_hash hash_preimage;
+  
+    ethsnarks::merkle_path_authenticator<mimc_hash> m_auth;
+    /* merkle_path_authenticator(
+        ProtoboardT &in_pb,
+        const size_t in_depth,
+        const VariableArrayT in_address_bits,
+        const VariableArrayT in_IVs,
+        const VariableT in_leaf,
+        const VariableT in_expected_root,
+        const VariableArrayT in_path,
+        const std::string &in_annotation_prefix = ""
+    ) :
+    */
+   ethsnarks::EdDSA_Verify eddsa_verify; 
+  /* EdDSA_Verify::EdDSA_Verify(
+    ProtoboardT& in_pb,
+    const Params& in_params,
+    const EdwardsPoint& in_base,    // B
+    const VariablePointT& in_A,     // A
+    const VariablePointT& in_R,     // R
+    const VariableArrayT& in_s,     // s
+    const VariableArrayT& in_msg,   // m
+    const std::string& annotation_prefix
+) :
+*/
+    
+     ssles_circuit(
                      protoboard<FieldT> &in_pb,
-                     //const size_t tree_depth,
-                     const merkle_proof<FieldT> & rootDigest, // root hash of all participants' public keys
-                     const digest_variable<FieldT> & hashDigest, // hash of the signed message
-                     const digest_variable<FieldT> & random,// the random here is the message m
-              // starting private inputs
-                     const digest_variable<FieldT> & sig, // not sure if sig is digest
-                     const digest_variable<FieldT> & msg,
-                     const digest_variable<FieldT> & path,
-                     const digest_variable<FieldT> & leafDigest,
-                     const pb_linear_combination_array<FieldT> & directionSelector,//   Merkled path: mp the Merkle path mp leads from the public key pk to the root hash rh,
-                     const digest_variable<FieldT> & pk, //The signer’s public key: pk.
+                    
                      const std::string &annotation_prefix
                      
-                      
-              
-
+           
                      ) :
         gadget<FieldT>(in_pb, "ssles_gadget")
+
+
+   {     
+     
+        msg(make_variable(in_pb,  ".msg"));
+        in_R(make_variable(in_pb,  ".msg"));
+
+        pub_hash_var(make_variable(in_pb, ".pub_hash_var"));
+
+        root_var(make_variable(in_pb,  ".root_var"));
+      
+        hash_var(make_variable(in_pb,  ".hash_var"));
+        
+         
+        // IV for SHA256
+        m_IVs(merkle_tree_IVs(in_pb));
+
+        zero(make_variable(in_pb, ".zero"));
+
+        // private inputs
+        
+        pk(make_variable(in_pb, ".pk"));
+        signature(make_variable(in_pb, ".signature"));
+        address_bits(in_pb, tree_depth, ".address_bits");
+        path_var(make_var_array(in_pb, tree_depth, ".path"));
+        s(make_var_array(in_pb, ".s"));
         
         
+      
+
+        // nullifier = H(address_bits, pk)
+        nullifier_hash(in_pb, zero, {address_bits->packed, pk}, FMT(annotation_prefix, ".nullifier_hash"));
+
+        // pub_hash = H(root, nullifier)
+        pub_hash(in_pb, zero, {root_var, nullifier_hash.result()}, FMT(annotation_prefix, ".pub_hash"));
+
+        // leaf_hash = H(pk)
+        leaf_hash(in_pb, zero, {pk}, ".leaf_hash");
+
+        // hash_preimage = H(signature)
+        hash_preimage(in_pb, zero, {signature}, ".hash_preimage");
+
+        // assert merkle_path_authenticate(leaf_hash, path, root)
+        m_auth(in_pb, tree_depth, address_bits->bits, m_IVs, leaf_hash.result(), root_var, path_var, ".authenticator");
+
+        // assert eddsa_verify(pk, msg, signature)
+        eddsa_verify(in_pb, in_params, in_base, pk, R, s, msg, ".sig verification");
+       
+   
+    {
+        // Only one public input variable is passed, which is `pub_hash`
         
+        in_pb.set_input_sizes( 1 );
+
         
-        {
-           
-            
-            // Allocate space for the verifier input which will be the public inputs, in our case, they are two elements of size 256 each
-            // will the random beacon have 256 bits?
-            const size_t input_size_in_bits = sha256_digest_len * 3;
-            
-            {
-                
-                const size_t input_size_in_field_elements = div_ceil(input_size_in_bits, FieldT::capacity());
-                
-                // we allocate space for the field elements to be of size input_size_in_field_elements
-                input_as_field_elements.allocate(in_pb, input_size_in_field_elements, "input_as_field_elements");
-                
-                // finally our input size to size of field elements
-                this->pb.set_input_sizes(input_size_in_field_elements);
-            }
-            
-            
-            zero.allocate(this->pb, FMT(this->annotation_prefix, "zero"));
-            // SHA256's length padding, emplace_back will add 0 or 1 at the end
-           
-            
-            
-            input_as_bits.insert(input_as_bits.end(), rootDigest.bits.begin(), rootDigest.bits.end());
-            input_as_bits.insert(input_as_bits.end(), hash.bits.begin(), hash.bits.end());
-            input_as_bits.insert(input_as_bits.end(), random.bits.begin(), random.bits.end());
-            
-            assert(input_as_bits.size() == input_size_in_bits);
-            
-            
-            // packer(in_pb, hasher.result().bits, public_inputs, FieldT::capacity(), FMT(annotation_prefix, ".packer"))
-            // packer has to enforce bitness
-            packer(in_pb, input_as_bits, input_as_field_elements, FieldT::capacity(), FMT(this->annotation_prefix, " packer"));
-            
-          
-            
-            
-            
-            
-            void generate_r1cs_constraints()
-            {
-                
-                
-                // Multipacking constraints (for input validation)
-                packer.generate_r1cs_constraints(true);
-                //rootDigest->generate_r1cs_constraints();
-                // pathDigest->generate_r1cs_constraints();
-                
-                
-                //ensure consistency of pathDigest and leafDigest with outputs left and right
-                lhs->generate_r1cs_constraints();
-                rhs->generate_r1cs_constraints();
-                //block->generate_r1cs_constraints();
-                // h_block->generate_r1cs_constraints();
-                
-                hash->generate_r1cs_constraints(false); /* ensure correct hash computations */
-                
-                // computed_root * 1 == rootDigest
-                
-                pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1, computed_root, root), "Enforce valid proof");
-                
-                
-                
-                
-                //bit_vector_copy_gadget generate_r1cs_constraints(const bool enforce_source_bitness, const bool enforce_target_bitness); bits were enforced for computed_root and root
-                //check_root->generate_r1cs_constraints(false, false);
-                
-                // Sanity check
-                generate_r1cs_equals_const_constraint<FieldT>(this->pb, zero, FieldT::zero(), "zero");
-                
-                
-            }
-            void generate_r1cs_witness()
-            {
-                //this->pb.val(zero) = FieldT::zero();
-                
-                packer->generate_r1cs_witness_from_bits();
-                lhs->generate_r1cs_witness();
-                rhs->generate_r1cs_witness();
-                //block->generate_r1cs_witness();
-                
-                /* compute hash */
-                hash->generate_r1cs_witness();
-                // check_root->generate_r1cs_witness();
-                
-                
-                
-                
-                
-                
-                
-                
-            }
-        };
-        
-        template<typename FieldT>
-        
-        // The statement (public values) is called primary input while the witness (the secret values) is called auxiliary input.
-        
-        const r1cs_primary_input<FieldT> l_input_map (const libff::bit_vector &root, const libff::bit_vector &digest)
-        
-        
-        
-        {
-            
-            return (libff::pack_bit_vector_into_field_element_vector<FieldT>(root),
-                    libff::pack_bit_vector_into_field_element_vector<FieldT>(digest));
-            
-            
-            
-        }
-           
-            assert(root.bits.size() == sha256_digest_len);
-            assert(digest.bits.size() == sha256_digest_len);
-            
-            
-            
-            {
-                
-                
-                libff::bit_vector input_as_bits;
-                input_as_bits.insert(input_as_bits.end(), root.begin(), root.end());
-                input_as_bits.insert(input_as_bits.end(), digest.begin(), digest.end());
-                
-                
-                std::cout << "**** After assert(size() == sha256_digest_len) *****" << std::endl;
-                
-                
-                std::vector<FieldT> input_as_field_elements = libff::pack_bit_vector_into_field_element_vector<FieldT>(input_as_bits);
-                
-                
-                std::cout << "**** After pack_bit_vector_into_field_element_vector *****" << std::endl;
-                
-                return input_as_field_elements;
-            
-            
-            
-            
-            
-            
-            
-    
+    }
+
 }
- using namespace libsnark;
- using ssles::ssles_circuit;
- using libff::alt_bn128_pp;
- using ethsnarks::ppT;
- using ethsnarks::FieldT;
- using ethsnarks::ProtoboardT;
- //using ethsnarks::field2bits_strict.cpp;
- 
- //Setup
- 
- 
- char *ssles_circuit_prove( const char *pk_file, libff::bit_victor leaf(0, 256), libff::bit_vector digest(0, 256), libff::bit_vector selector(0, 256), libff::bit_vector root(0, 256), const pb_linear_combination<FieldT> successful)
- {
- 
- ppT::init_public_params();
- 
- libff::alt_bn128_pp::init_public_params();
- 
- 
- ProtoboardT pb;
- ssles_circuit ssles(pb, "ssles");
- ssles.generate_r1cs_constraints();
- merkle_proof.generate_r1cs_constraints();
- mod_hashpreimage.generate_r1cs_constraints();
- 
- 
- if( ! pb.is_satisfied() )
- {
- return nullptr;
- }
- 
- // the proof in a json file
- const auto json = ssles::snark_prove_from_pb(pb, pk_file);
- // auto json = proof_to_json (proof, primary_input);
- 
- 
- return std::strdup(json.c_str());
- }
- 
- 
- 
- int ssles_circuit_genkeys( const char *pk_file, const char *vk_file )
- {
- // Generate the verifying/proving keys. (This is trusted setup!)
- libff::alt_bn128_pp::init_public_params();
- 
- ProtoboardT pb;
- Gadget<FieldT> ssles(pb, "ssles");
- ssles.generate_r1cs_constraints();
- 
- return ssles::snark_genkeys<ssles::ssles_circuit>(pk_file, vk_file);
- }
- 
- 
- bool ssles_circuit_verify( const char *vk_json, const char *proof_json )
- {
- return ssles::snark_verify( vk_json, proof_json );
- }
- 
- 
- 
- };
- 
- 
- 
- 
- 
- }
+    void generate_r1cs_constraints()
+
+
+    {    // generate constraint systems for all gadgets
+        nullifier_hash.generate_r1cs_constraints();
+        // enforce bitness
+        address_bits->generate_r1cs_constraints(true);
+
+        // Ensure privately provided public inputs match the hashed input
+        pub_hash.generate_r1cs_constraints();
+        hash_preimage.generate_r1cs_constraints();
+
+
+        
+        this->pb.add_r1cs_constraint(
+            r1cs_constraint<FieldT>(pub_hash_var, FieldT::one(), pub_hash.result()),
+            "Enforce valid proof : pub_hash_var == H(root, nullifier)");
+
+        // ensure correct hash computations 
+        this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(hash_var, FieldT::one(), hash_preimage.result()), "Enforce valid proof");
+     
+        // Enforce zero internally
+        this->pb.add_r1cs_constraint(
+            r1cs_constraint<FieldT>(zero, zero, zero - zero),
+            "0 * 0 == 0 - 0 ... zero is zero!");
+
+        leaf_hash.generate_r1cs_constraints();
+        m_auth.generate_r1cs_constraints();
+        eddsa_verify.generate_r1cs_constraints();
+    } 
+
+    void generate_r1cs_witness(
+        const FieldT & root,         // merkle tree root
+        const libff::bit_vector & hash_sig,
+        const FieldT & pubkey,     // pk is a field element, check?
+        const libff::bit_vector & address,
+        const std::vector<FieldT> & path,
+        const libff::bit_vector & sig
+       
+    ) {
+
+      
+        // hashed public inputs
+        this->pb.val(root_var) = root;
+        this->pb.val(external_hash_var) = exthash;
+
+        // Set pk to pubkey
+        this->pb.val(pk) = pubkey;
+
+        // Fill our digests with our witnessed data
+        address_bits->bits.fill_with_bits(this->pb, address);
+        address_bits->generate_r1cs_witness_from_bits();
+
+        nullifier_hash.generate_r1cs_witness();
+
+        // public hash
+        this->pb.val(pub_hash_var) = mimc_hash({root, this->pb.val(nullifier_hash.result()), exthash});
+        
+
+        pub_hash.generate_r1cs_witness();
+
+        for( size_t i = 0; i < tree_depth; i++ )
+        {
+            this->pb.val(path_var[i]) = path[i];
+        }
+
+        leaf_hash.generate_r1cs_witness();
+        m_auth.generate_r1cs_witness();
+    }
+};
+// 
+   } 
+
+// why do we need this function?
+   size_t ssles_tree_depth( void ) {
+    return SSLES_TREE_DEPTH;
+}
+
+// why do we need this function?
+char* ssles_nullifier( const char *pubkey, const char *leaf_index )
+{
+    ppT::init_public_params();
+
+    const FieldT arg_secret(pubkey);
+    const FieldT arg_index(leaf_index);
+    const FieldT arg_result(ethsnarks::mimc_hash({arg_index, arg_secret}));
+
+    // Convert result to mpz
+    // what is mpz???
+    // what is bigint???
+    const auto result_bigint = arg_result.as_bigint();
+    mpz_t result_mpz;
+    mpz_init(result_mpz);
+    result_bigint.to_mpz(result_mpz);
+
+    // Convert to string
+
+    // why convert to mpz and then string??
+    char *result_str = mpz_get_str(nullptr, 10, result_mpz);
+    assert( result_str != nullptr );
+    mpz_clear(result_mpz);
+
+    return result_str;
+}
+
+
+static char *ssles_prove_internal(
+    const char *pk_file,
+    const FieldT arg_root,
+    const FieldT arg_exthash,
+    const FieldT arg_secret,
+    const libff::bit_vector address_bits,
+    const std::vector<FieldT> arg_path
+)
+{
+    // Create protoboard with gadget
+    ProtoboardT pb;
+   ssles::ssles_circuit mod(pb, "ssles");
+    mod.generate_r1cs_constraints();
+    mod.generate_r1cs_witness(arg_root, arg_exthash, arg_secret, address_bits, arg_path);
+   // check if circuit is satisfied
+    if( ! pb.is_satisfied() )
+    {
+        std::cerr << "Not Satisfied!" << std::endl;
+        return nullptr;
+    }
+
+    std::cerr << pb.num_constraints() << " constraints" << std::endl;
+
+    // Return proof as a JSON document, which must be destroyed by the caller
+    const auto proof_as_json = ethsnarks::stub_prove_from_pb(pb, pk_file);
+    return ::strdup(proof_as_json.c_str());
+}
+// why do we have prove and prove internal???
+
+char *ssles_prove_json( const char *pk_file, const char *in_json )
+{
+    ppT::init_public_params();
+
+    const auto root = json::parse(in_json);
+    const auto arg_root = ethsnarks::parse_FieldT(root.at("root"));
+    const auto arg_secret = ethsnarks::parse_FieldT(root.at("secret")); 
+    //const auto arg_exthash = ethsnarks::parse_FieldT(root.at("exthash"));
+
+    const auto arg_path = ethsnarks::create_F_list(root.at("path"));
+    if( arg_path.size() != SSLES_TREE_DEPTH )
+    {
+        std::cerr << "Path length doesn't match tree depth" << std::endl;
+        return nullptr;
+    }
+
+    // Fill address bits from integer
+    unsigned long address = root.at("address").get<decltype(address)>();
+    assert( (sizeof(address) * 8) >= SSLES_TREE_DEPTH );
+    libff::bit_vector address_bits;
+    address_bits.resize(SSLES_TREE_DEPTH);
+    for( size_t i = 0; i < SSLES_TREE_DEPTH; i++ )
+    {
+        address_bits[i] = (address & (1u<<i)) != 0;
+    }
+
+    return ssles_prove_internal(pk_file, arg_root, arg_secret, address_bits, arg_path);
+}
+
+// and why we have prove as well in addition to prove_internal and prove_json?? ah in prove_json we have 
+//pk_file and vk_file as parameters but in prove we have pk_file with the prover inputs
+char *ssles_prove(
+    const char *pk_file,
+    const char *in_root,
+    const char *in_secret,
+    const char *in_address,
+    const char **in_path
+) {
+    ppT::init_public_params();
+
+    const FieldT arg_root(in_root);
+    const FieldT arg_secret(in_secret);
+
+    // Fill address bits with 0s and 1s from str
+    // XXX: populate bits from integer (offset of the leaf in the merkle tree)
+    //      parse integer from string, rather than passing as unsigned?
+    libff::bit_vector address_bits;
+    address_bits.resize(SSLES_TREE_DEPTH);
+    // what is this?
+    if( strlen(in_address) != SSLES_TREE_DEPTH )
+    {
+        std::cerr << "Address length doesnt match depth" << std::endl;
+        return nullptr;
+    }
+    for( size_t i = 0; i < SSLES_TREE_DEPTH; i++ )
+    {
+        if( in_address[i] != '0' && in_address[i] != '1' ) {
+            std::cerr << "Address bit " << i << " invalid, unknown: " << in_address[i] << std::endl;
+            return nullptr;
+        }
+        address_bits[i] = '0' - in_address[i];
+    }
+
+    // Fill path from field elements from in_path
+    std::vector<FieldT> arg_path;
+    arg_path.resize(SSLES_TREE_DEPTH);
+    for( size_t i = 0; i < SSLES_TREE_DEPTH; i++ ) {
+        assert( in_path[i] != nullptr );
+        arg_path[i] = FieldT(in_path[i]);
+    }
+
+    return ssles_prove_internal(pk_file, arg_root, arg_exthash, arg_secret, address_bits, arg_path);
+}
+
+
+int ssles_genkeys( const char *pk_file, const char *vk_file )
+{
+    return ethsnarks::stub_genkeys<ssles::ssles_circuit>(pk_file, vk_file);
+}
+
+
+bool ssles_verify( const char *vk_json, const char *proof_json )
+{
+    return ethsnarks::stub_verify( vk_json, proof_json );
+}

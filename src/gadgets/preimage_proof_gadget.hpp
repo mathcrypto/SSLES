@@ -52,8 +52,8 @@ template<typename FieldT>
     const pb_variable_array<FieldT> input_as_field_elements; /* R1CS input */
     const pb_variable_array<FieldT> input_as_bits;  // unpacked R1CS input since these values
     const size_t input_size_in_fields;
-    shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker;
-    shared_ptr<sha256_compression_function_gadget<FieldT>> sha256_gadget; /* hashing gadget */
+    typedef shared_ptr<libsnark::multipacking_gadget<FieldT>> unpacker;
+    typedef shared_ptr<sha256_compression_function_gadget<FieldT>> sha256_gadget; /* hashing gadget */
     shared_ptr<digest_variable<FieldT>> Hash;  
     shared_ptr<block_variable<FieldT>>  block; /* 512 bit block that contains preimage + padding */
     shared_ptr<digest_variable<FieldT>> preimage;  
@@ -84,7 +84,7 @@ template<typename FieldT>
 
 
         {
-            
+
             // number of field packed elements as public inputs
 
             input_size_in_fields = libff::div_ceil(input_size_in_bits, FieldT::capacity()); 
@@ -147,7 +147,7 @@ template<typename FieldT>
         assert(block.bits.size() == SHA256_block_size);
 
 
-        
+
 
         computed_hash.reset(new digest_variable<FieldT>(pb, sha256_digest_len, FMT(this->annotation_prefix, " computed_hash")));
         
@@ -169,7 +169,7 @@ template<typename FieldT>
         // Multipacking constraints (for input validation) with enforcing bitness
         unpacker.generate_r1cs_constraints(true);
         preimage->generate_r1cs_constraints();
-        // Sanity check, what is this sanity check and why do we need it?
+        // Sanity check
         generate_r1cs_equals_const_constraint<FieldT>(this->pb, zero, FieldT::zero(), "zero");
         
         // Constraints to ensure the hash validates.
@@ -178,7 +178,7 @@ template<typename FieldT>
 
         // ensure correct hash computations 
         this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1, computed_hash, Hash), "Enforce valid proof");
-     // Constraint that computed_root * 1 == rootDigest which is equivalent to computed_root == rootDigest
+     // Constraint that computed_root * 1 == rootDigest which is equivalent to computed_hash == Hash
     }
 
 
@@ -197,7 +197,7 @@ template<typename FieldT>
         sha256_gadget->generate_r1cs_witness();
         unpacker->generate_r1cs_witness_from_bits(); 
         //unpacker->generate_r1cs_witness_from_packed();
-        
+
 
 
         Hash->bits.fill_with_bits(this->pb, pub_hash); 
@@ -233,7 +233,7 @@ const r1cs_primary_input<FieldT> primary_inputs (const bit_vector &pub_hash)
 
     /* std::vector<FieldT> pack_bit_vector_into_field_element_vector(const bit_vector &v, const size_t chunk_bits) */
     std::vector<FieldT> input_as_field_elements = pack_bit_vector_into_field_element_vector<FieldT>(input_as_bits);
-    
+
 
 
     std::cout << "**** After pack_bit_vector_into_field_element_vector *****" << std::endl;
