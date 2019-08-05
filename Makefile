@@ -35,7 +35,7 @@ clean:
 
 
 
-test: .keys/ssles.pk.raw  solidity-test python-test
+test: .keys/ssles.pk.raw  
 
 .keys/ssles.pk.raw: $(CLI)
 	mkdir -p $(dir $@)
