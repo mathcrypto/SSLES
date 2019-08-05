@@ -20,12 +20,11 @@ static int main_prove( int argc, char **argv )
 {
     if( argc < (10 + (int)SSLES_TREE_DEPTH) )
     {
-        cerr << "Usage: " << argv[0] << " prove <pk.raw> <proof.json> <public:root> <public:prehash> <secret:pubkey><secret:msg> <secret:merkle-address> <secret:merkle-path ...>" << endl;
+        cerr << "Usage: " << argv[0] << " prove <pk.raw> <proof.json> <public:root> <public:prehash>  <secret:pubkey><secret:msg> <secret:merkle-address> <secret:merkle-path ...>" << endl;
         cerr << "Args: " << endl;
         cerr << "\t<pk.raw>         Path to proving key" << endl;
         cerr << "\t<proof.json>     Write proof to this file" << endl;
         cerr << "\t<root>           Merkle tree root" << endl;
-       // cerr << "\t<exthash>        Hash of external variables" << endl;
         cerr << "\t<secret>         Spend secret" << endl;
         cerr << "\t<prehash>        Hash of signed message" << endl;
         cerr << "\t<msg>            message" << endl;
@@ -37,7 +36,6 @@ static int main_prove( int argc, char **argv )
     auto pk_filename = argv[2];
     auto proof_filename = argv[3];
     auto arg_root = argv[4];
-    //auto arg_exthash = argv[5];
     auto arg_secret = argv[5];
     auto arg_prehash = argv[6];
     auto arg_msg = argv[7];
@@ -72,7 +70,7 @@ void read_all_file (const std::string &filename, std::string &out) {
     fh.seekg(0, std::ios::beg);
 
     out.assign((std::istreambuf_iterator<char>(fh)),
-                std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 }
 
 
